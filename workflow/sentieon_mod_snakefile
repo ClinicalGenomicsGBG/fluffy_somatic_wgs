@@ -29,8 +29,8 @@ ruleorder: _results_vcf_tn > misc_bgzip
 ruleorder: annotation_simple_sv_annotation_tn > misc_bgzip
 ruleorder: _results_pindel_vcf > misc_bgzip
 ruleorder: gatk_model_segments > cnv_sv_gatk_model_segments
-#ruleorder: _results_svdb_vcf > misc_bgzip
-#ruleorder: _results_svdb_tbi > misc_tabix
+ruleorder: _results_svdb_vcf > misc_bgzip
+ruleorder: _results_svdb_tbi > misc_tabix
 
 
 aligner = config.get("aligner", None)
@@ -71,7 +71,6 @@ elif aligner == "bwa_gpu":
 
 elif aligner == "bwa_sentieon":
 
-    include: "rules/sample_order_multiqc.smk" # This needs to be adapted to our setting
     ruleorder: _results_manta_tn_tbi_all > misc_tabix
     ruleorder: _results_manta_tn_tbi_aml > misc_tabix
     ruleorder: _results_manta_t_tbi_all > misc_tabix
@@ -266,12 +265,21 @@ use rule manta_config_t from cnv_sv as cnv_sv_manta_config_t with:
         ref=config["reference"]["fasta"],
 
 
-use rule gatk_collect_read_counts from cnv_sv as cnv_sv_gatk_collect_read_counts with:
-    input:
-        bam=lambda wildcards: get_bam_input(wildcards, t_n="T")[0],
-        bai=lambda wildcards: get_bam_input(wildcards, t_n="T")[1],
-        interval=config.get("reference", {}).get("design_intervals_gatk_cnv", ""),
+if aligner == "bwa_gpu":
 
+    use rule gatk_collect_read_counts from cnv_sv as cnv_sv_gatk_collect_read_counts with:
+        input:
+            bam="parabricks/pbrun_fq2bam/{sample}_T.bam",
+            bai="parabricks/pbrun_fq2bam/{sample}_T.bam.bai",
+            interval=config.get("reference", {}).get("design_intervals_gatk_cnv", ""),
+
+elif aligner == "bwa_sentieon":
+
+    use rule gatk_collect_read_counts from cnv_sv as cnv_sv_gatk_collect_read_counts with:
+        input:
+            bam="sentieon/bwa_mem/{sample}_T.bam",
+            bai="sentieon/bwa_mem/{sample}_T.bam.bai",
+            interval=config.get("reference", {}).get("design_intervals_gatk_cnv", ""),
 
 use rule pindel_generate_config from cnv_sv as cnv_sv_pindel_generate_config with:
     input:
@@ -476,6 +484,22 @@ module sentieon:
 
 use rule * from sentieon as sentieon_*
 
+use rule bwa_mem from sentieon as sentieon_bwa_mem with:
+    output:
+        bam=temp("sentieon/bwa_mem/{wildcards.sample}_{wildcards.type}.bam"),
+        bai=temp("sentieon/bwa_mem/{wildcards.sample}_{wildcards.type}.bam.bai")
+    log:
+	    "sentieon/bwa_mem/{wildcards.sample}_{wildcards.type}.output.log",
+    benchmark:
+	    repeat(
+		    "sentieon/bwa_mem/{wildcards.sample}_{wildcards.type}.output.benchmark.tsv",
+			config.get("sentieon", {}).get("benchmark_repeats", 1),
+		)
+
+
+use rule dedup from sentieon as sentieon_dedup with:
+    input:
+        bam="sentieon/bwa_mem/{sample}_{type}.bam"
 
 module prealignment:
     snakefile:
@@ -590,55 +614,29 @@ if aligner == "bwa_sentieon":
             use_input_files_only=config.get("multiqc", {}).get("use_input_files_only", True),
 
 
-if aligner == "bwa_gpu":
-    use rule peddy from qc as qc_peddy with:
-        input:
-            vcf="parabricks/pbrun_mutectcaller_t/{sample}_T.vcf.gz",
-            ped="qc/peddy/{sample}.peddy.fam",
-            tbi="parabricks/pbrun_mutectcaller_t/{sample}_T.vcf.gz.tbi",
-        output:
-            ped=temp("qc/peddy/{sample}/peddy.peddy.ped"),
-            ped_check=temp("qc/peddy/{sample}/peddy.ped_check.csv"),
-            sex_check="qc/peddy/{sample}/peddy.sex_check.csv",
-            het_check=temp("qc/peddy/{sample}/peddy.het_check.csv"),
-            ped_html=temp("qc/peddy/{sample}/peddy.html"),
-            ped_vs_html=temp("qc/peddy/{sample}/peddy.vs.html"),
-            pca=temp("qc/peddy/{sample}/peddy.background_pca.json"),
-        log:
-            "qc/peddy/{sample}.output.log",
-        benchmark:
-            repeat(
-                "qc/peddy/{sample}.peddy.benchmark.tsv",
-                config.get("peddy", {}).get("benchmark_repeats", 1),
-            )
-        params:
-            prefix="qc/peddy/{sample}/",
-            extra=config.get("peddy", {}).get("extra", ""),
-
-if aligner == "bwa_sentieon":
-    use rule peddy from qc as qc_peddy with:
-        input:
-            vcf="sentieon/dnascope/{sample}_N_DNAscope.vcf.gz",
-            ped="qc/peddy/{sample}.peddy.fam",
-            tbi="sentieon/dnascope/{sample}_N_DNAscope.vcf.gz.tbi",
-        output:
-            ped=temp("qc/peddy/{sample}/peddy.peddy.ped"),
-            ped_check=temp("qc/peddy/{sample}/peddy.ped_check.csv"),
-            sex_check="qc/peddy/{sample}/peddy.sex_check.csv",
-            het_check=temp("qc/peddy/{sample}/peddy.het_check.csv"),
-            ped_html=temp("qc/peddy/{sample}/peddy.html"),
-            ped_vs_html=temp("qc/peddy/{sample}/peddy.vs.html"),
-            pca=temp("qc/peddy/{sample}/peddy.background_pca.json"),
-        log:
-            "qc/peddy/{sample}.output.log",
-        benchmark:
-            repeat(
-                "qc/peddy/{sample}.peddy.benchmark.tsv",
-                config.get("peddy", {}).get("benchmark_repeats", 1),
-            )
-        params:
-            prefix="qc/peddy/{sample}/",
-            extra=config.get("peddy", {}).get("extra", ""),
+use rule peddy from qc as qc_peddy with:
+    input:
+        vcf="parabricks/pbrun_mutectcaller_t/{sample}_T.vcf.gz",
+        ped="qc/peddy/{sample}.peddy.fam",
+        tbi="parabricks/pbrun_mutectcaller_t/{sample}_T.vcf.gz.tbi",
+    output:
+        ped=temp("qc/peddy/{sample}/peddy.peddy.ped"),
+        ped_check=temp("qc/peddy/{sample}/peddy.ped_check.csv"),
+        sex_check="qc/peddy/{sample}/peddy.sex_check.csv",
+        het_check=temp("qc/peddy/{sample}/peddy.het_check.csv"),
+        ped_html=temp("qc/peddy/{sample}/peddy.html"),
+        ped_vs_html=temp("qc/peddy/{sample}/peddy.vs.html"),
+        pca=temp("qc/peddy/{sample}/peddy.background_pca.json"),
+    log:
+        "qc/peddy/{sample}.output.log",
+    benchmark:
+        repeat(
+            "qc/peddy/{sample}.peddy.benchmark.tsv",
+            config.get("peddy", {}).get("benchmark_repeats", 1),
+        )
+    params:
+        prefix="qc/peddy/{sample}/",
+        extra=config.get("peddy", {}).get("extra", ""),
 
 
 use rule picard_collect_alignment_summary_metrics from qc as qc_picard_alignment_summary_metrics with:
