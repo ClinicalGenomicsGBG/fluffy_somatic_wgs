@@ -24,13 +24,13 @@ ruleorder: _results_manta_tn_tbi > misc_tabix
 ruleorder: _results_manta_t_tbi > misc_tabix
 ruleorder: _results_cnvkit_tbi > misc_tabix
 ruleorder: _results_vcf_tn > misc_bgzip
-#ruleorder: _results_gatk_vcf > misc_bgzip
-#ruleorder: _results_gatk_vcf_tbi > misc_tabix
+ruleorder: _results_gatk_vcf > misc_bgzip
+ruleorder: _results_gatk_vcf_tbi > misc_tabix
 ruleorder: annotation_simple_sv_annotation_tn > misc_bgzip
 ruleorder: _results_pindel_vcf > misc_bgzip
 ruleorder: gatk_model_segments > cnv_sv_gatk_model_segments
-#ruleorder: _results_svdb_vcf > misc_bgzip
-#ruleorder: _results_svdb_tbi > misc_tabix
+ruleorder: _results_svdb_vcf > misc_bgzip
+ruleorder: _results_svdb_tbi > misc_tabix
 
 
 aligner = config.get("aligner", None)
